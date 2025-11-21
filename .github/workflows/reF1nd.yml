@@ -109,23 +109,24 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Derive version and names
+      - name: Derive version and names (via git tags)
         if: steps.decide.outputs.changed == 'true'
         id: meta
         shell: bash
         run: |
-          # 优先从源码解析 vX.Y.Z（CoreVersion/Version）
-          VERSION=$(grep -R -h -E '(const|var)[[:space:]]+(CoreVersion|Version)[[:space:]]*=[[:space:]]*"(v[0-9]+\.[0-9]+\.[0-9][^"]*)"' --include="*.go" . 2>/dev/null | head -n1 | sed -E 's/.*"(v[^"]+)".*/\1/') || true
-          # 若未解析到，则取最近 tag
+          set -e
+          VERSION=""
+          # 1) 尝试找到“指向当前提交”的 tag（同时兼容轻量/注解 tag）
+          VERSION=$(git ls-remote --tags "${{ steps.prep.outputs.upstream_repo }}" | awk -v sha="${UPSTREAM_SHA}" '\$1==sha{print \$2}' | sed -E 's|refs/tags/||; s|\^\{\}||' | head -n1)
+          # 2) 若没有精确匹配的 tag，则取仓库最新 v* tag（语义化排序）
           if [ -z "$VERSION" ]; then
-            git fetch --tags --force --prune || true
-            git fetch --depth=0 origin || true
-            VERSION=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || true)
+            VERSION=$(git ls-remote --tags "${{ steps.prep.outputs.upstream_repo }}" 'refs/tags/v*' | awk '{print \$2}' | sed -E 's|refs/tags/||; s|\^\{\}||' | sort -V | tail -n1)
           fi
-          # 再不行，退回分支名
+          # 3) 仍未获取到则回退到分支/输入
           if [ -z "$VERSION" ]; then
             VERSION="${REF}"
           fi
+
           OUT="sing-box-linux-arm64-${VERSION}-${SHORT_SHA}"
           ZIP="${OUT}.zip"
           TAG="sing-box-${VERSION}-${SHORT_SHA}"
@@ -149,7 +150,7 @@ jobs:
           PKG_CONST="$MODULE/constant"
           LDFLAGS_EXTRA=""
 
-          # 仅在存在 var 时注入，避免覆盖源码中的 const 版本
+          # 仅在变量存在时注入，避免覆盖源码 const
           if [ -d constant ]; then
             if grep -R -q -E 'var[[:space:]]+CoreVersion\b' constant; then
               LDFLAGS_EXTRA="$LDFLAGS_EXTRA -X ${PKG_CONST}.CoreVersion=${VERSION}"
