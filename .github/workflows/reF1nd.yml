@@ -69,7 +69,7 @@ jobs:
         uses: actions/cache/restore@v3
         with:
           path: upstream_state/${{ steps.prep.outputs.ref }}
-          key: singbox-state-${{ steps.prep.outputs.ref }}-${{ steps.upstream.outputs.sha }}
+          key: singbox-state-${{ steps.prep.outputs.ref }}-${{ steps.upstream.outputs.sha }}-${{ github.run_id }}
           restore-keys: |
             singbox-state-${{ steps.prep.outputs.ref }}-
       - name: Decide if build is needed
@@ -205,6 +205,7 @@ jobs:
       - name: Save cache
         if: steps.decide.outputs.changed == 'true'
         uses: actions/cache/save@v3
+        continue-on-error: true
         with:
           path: upstream_state/${{ steps.prep.outputs.ref }}
-          key: singbox-state-${{ steps.prep.outputs.ref }}-${{ steps.upstream.outputs.sha }}
+          key: singbox-state-${{ steps.prep.outputs.ref }}-${{ steps.upstream.outputs.sha }}-${{ github.run_id }}
