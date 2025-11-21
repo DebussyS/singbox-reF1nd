@@ -105,6 +105,26 @@ jobs:
         with:
           go-version: '1.22'
 
+      - name: Fix version in source code
+        if: steps.decide.outputs.changed == 'true'
+        id: fix-version
+        shell: bash
+        run: |
+          VERSION="reF1nd"
+          echo "Fixed version: $VERSION"
+          find . -name "*.go" -type f | xargs grep -l -E "(CoreVersion|Version).*=.*\"(unknown|dev|v[0-9])\"" | while read file; do
+            echo "Fixing version in: $file"
+            sed -i 's/\(CoreVersion\|Version\).*=.*\"\(unknown\|dev\|v[0-9][^"]*\)\"/\1 = "'"$VERSION"'"/g' "$file"
+          done
+          if [ -z "$(find . -name "*.go" -type f | xargs grep -l -E "(CoreVersion|Version).*=.*\"(unknown|dev|v[0-9])\")" ]; then
+            echo "Trying alternative pattern..."
+            find . -name "*.go" -type f | xargs grep -l -E "(const|var).*(CoreVersion|Version)" | while read file; do
+              echo "Checking: $file"
+              sed -i 's/\(CoreVersion\|Version\).*=.*\"[^\"]*\"/\1 = "'"$VERSION"'"/g' "$file"
+            done
+          fi
+          echo "Version fix completed"
+
       - name: Derive version and names
         if: steps.decide.outputs.changed == 'true'
         id: meta
@@ -130,6 +150,11 @@ jobs:
           GOARCH: arm64
         run: |
           go build -v -o "${OUT}" -trimpath -ldflags="-s -w" -tags="with_quic with_clash_api" ./cmd/sing-box
+      - name: Verify version
+        if: steps.decide.outputs.changed == 'true'
+        shell: bash
+        run: |
+          ./${OUT} version
       - name: Package zip
         if: steps.decide.outputs.changed == 'true'
         shell: bash
