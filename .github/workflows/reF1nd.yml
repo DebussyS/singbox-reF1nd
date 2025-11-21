@@ -114,11 +114,15 @@ jobs:
         id: meta
         shell: bash
         run: |
-          git fetch --tags --force --prune || true
-          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          # 优先从源码解析 vX.Y.Z（CoreVersion/Version）
+          VERSION=$(grep -R -h -E '(const|var)[[:space:]]+(CoreVersion|Version)[[:space:]]*=[[:space:]]*"(v[0-9]+\.[0-9]+\.[0-9][^"]*)"' --include="*.go" . 2>/dev/null | head -n1 | sed -E 's/.*"(v[^"]+)".*/\1/') || true
+          # 若未解析到，则取最近 tag
           if [ -z "$VERSION" ]; then
-            VERSION=$(grep -R -h -E '(CoreVersion|Version)[[:space:]]*=[[:space:]]*"v[0-9]+\.[0-9]+\.[0-9]+"' constant cmd/internal/build 2>/dev/null | head -n1 | sed -E 's/.*"([^"]+)".*/\1/') || true
+            git fetch --tags --force --prune || true
+            git fetch --depth=0 origin || true
+            VERSION=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || true)
           fi
+          # 再不行，退回分支名
           if [ -z "$VERSION" ]; then
             VERSION="${REF}"
           fi
@@ -145,6 +149,7 @@ jobs:
           PKG_CONST="$MODULE/constant"
           LDFLAGS_EXTRA=""
 
+          # 仅在存在 var 时注入，避免覆盖源码中的 const 版本
           if [ -d constant ]; then
             if grep -R -q -E 'var[[:space:]]+CoreVersion\b' constant; then
               LDFLAGS_EXTRA="$LDFLAGS_EXTRA -X ${PKG_CONST}.CoreVersion=${VERSION}"
