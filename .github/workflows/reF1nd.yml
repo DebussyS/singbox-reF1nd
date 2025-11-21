@@ -6,7 +6,7 @@ inputs:
 version:
 description: 'sing-box version (tag/branch) to build'
 required: true
-default: 'reF1nd-main'
+default: 'main'
 
 jobs:
 build:
