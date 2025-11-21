@@ -39,12 +39,12 @@ jobs:
         shell: bash
         run: |
           set -e
-          SHA=$(git ls-remote --exit-code --heads "$UPSTREAM_REPO" "refs/heads/${REF}" | awk '{print \$1}') || true
+          SHA=$(git ls-remote --exit-code --heads "$UPSTREAM_REPO" "refs/heads/${REF}" | cut -f1) || true
           if [ -z "$SHA" ]; then
-            SHA=$(git ls-remote --exit-code --tags "$UPSTREAM_REPO" "refs/tags/${REF}^{}" | awk '{print \$1}') || true
+            SHA=$(git ls-remote --exit-code --tags "$UPSTREAM_REPO" "refs/tags/${REF}^{}" | cut -f1) || true
           fi
           if [ -z "$SHA" ]; then
-            SHA=$(git ls-remote "$UPSTREAM_REPO" HEAD | awk '{print \$1}')
+            SHA=$(git ls-remote "$UPSTREAM_REPO" HEAD | cut -f1)
           fi
           SHORT_SHA="${SHA:0:7}"
           echo "UPSTREAM_SHA=$SHA"    >> "$GITHUB_ENV"
