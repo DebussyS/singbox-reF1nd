@@ -1,10 +1,10 @@
-name: 构建最小化 sing-box 核心 (仅 ARM64)
+name: Build Minimal sing-box Core
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: '要构建的 sing-box 版本（标签/分支/提交）'
+        description: 'sing-box version (tag/branch) to build'
         required: true
         default: 'reF1nd-main'
 
@@ -12,35 +12,30 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 检出 sing-box 代码库
+      - name: Checkout official sing-box repository
         uses: actions/checkout@v4
         with:
           repository: 'reF1nd/sing-box'
           ref: ${{ github.event.inputs.version }}
 
-      - name: 设置 Go 环境
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-          cache: true
 
-      - name: 为 ARM64 构建 sing-box
+      - name: Build sing-box for arm64
         env:
           CGO_ENABLED: 0
           GOOS: linux
           GOARCH: arm64
         run: |
-          go build -v -o sing-box -trimpath \
-            -ldflags="-s -w -buildid=" \
-            -tags="with_quic,with_clash_api,with_grpc,with_wireguard" \
+          go build -v -o sing-box-linux-arm64 -trimpath \
+            -ldflags="-s -w" \
+            -tags="with_quic with_clash_api" \
             ./cmd/sing-box
-          
-          # 检查二进制文件信息
-          file sing-box
-          ls -lh sing-box
 
-      - name: 上传构建产物
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sing-box-${{ github.event.inputs.version }}-linux-arm64
-          path: sing-box
+          name: sing-box-minimal-${{ github.event.inputs.version }}-arm64
+          path: sing-box-linux-arm64
