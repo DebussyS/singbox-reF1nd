@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'sing-box version (tag/branch) to build'
+        description: 'sing-box version (tag/branch/commit)'
         type: string
         required: false
         default: 'reF1nd-main'
@@ -27,9 +27,9 @@ jobs:
     steps:
       - name: Prepare context
         id: prep
-        shell: bash
         run: |
           UPSTREAM_REPO="https://github.com/reF1nd/sing-box.git"
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
             REF="${{ github.event.inputs.version }}"
           elif [ "${{ github.event_name }}" = "repository_dispatch" ] && [ -n "${{ github.event.client_payload.version }}" ]; then
@@ -37,61 +37,80 @@ jobs:
           else
             REF="reF1nd-main"
           fi
+
           FORCE="false"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.force }}" = "true" ]; then
             FORCE="true"
           fi
-          echo "UPSTREAM_REPO=$UPSTREAM_REPO" >> "$GITHUB_ENV"
-          echo "REF=$REF" >> "$GITHUB_ENV"
-          echo "FORCE=$FORCE" >> "$GITHUB_ENV"
-          echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "upstream_repo=$UPSTREAM_REPO" >> "$GITHUB_OUTPUT"
-          echo "force=$FORCE" >> "$GITHUB_OUTPUT"
-      - name: Resolve upstream commit SHA
+
+          echo "REF=$REF" >> $GITHUB_ENV
+          echo "UPSTREAM_REPO=$UPSTREAM_REPO" >> $GITHUB_ENV
+          echo "FORCE=$FORCE" >> $GITHUB_ENV
+          echo "ref=$REF" >> $GITHUB_OUTPUT
+          echo "upstream=$UPSTREAM_REPO" >> $GITHUB_OUTPUT
+          echo "force=$FORCE" >> $GITHUB_OUTPUT
+
+      - name: Resolve SHA (tag/branch/commit)
         id: upstream
-        shell: bash
         run: |
           set -e
-          SHA=$(git ls-remote --exit-code --heads "${{ steps.prep.outputs.upstream_repo }}" "refs/heads/${REF}" | cut -f1) || true
+
+          # Try branch
+          SHA=$(git ls-remote --heads "${UPSTREAM_REPO}" "refs/heads/${REF}" | cut -f1)
+          
+          # Try tag
           if [ -z "$SHA" ]; then
-            SHA=$(git ls-remote --exit-code --tags "${{ steps.prep.outputs.upstream_repo }}" "refs/tags/${REF}^{}" | cut -f1) || true
+            SHA=$(git ls-remote --tags "${UPSTREAM_REPO}" "${REF}^{}" | cut -f1)
           fi
+
+          # Try raw commit
           if [ -z "$SHA" ]; then
-            SHA=$(git ls-remote "${{ steps.prep.outputs.upstream_repo }}" HEAD | cut -f1)
+            SHA=$(git ls-remote "${UPSTREAM_REPO}" "${REF}" | cut -f1)
           fi
-          SHORT_SHA="${SHA:0:7}"
-          echo "UPSTREAM_SHA=$SHA" >> "$GITHUB_ENV"
-          echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_ENV"
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "short=$SHORT_SHA" >> "$GITHUB_OUTPUT"
-      - name: Restore last processed state
+
+          # If still empty → FAIL
+          if [ -z "$SHA" ]; then
+            echo "ERROR: REF '${REF}' not found (branch/tag/commit)."
+            exit 1
+          fi
+
+          SHORT="${SHA:0:7}"
+
+          echo "UPSTREAM_SHA=$SHA" >> $GITHUB_ENV
+          echo "SHORT_SHA=$SHORT" >> $GITHUB_ENV
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "short=$SHORT" >> $GITHUB_OUTPUT
+
+      - name: Load cache state
         id: cache-restore
         uses: actions/cache/restore@v3
         with:
           path: upstream_state/${{ steps.prep.outputs.ref }}
-          key: singbox-state-${{ steps.prep.outputs.ref }}-${{ steps.upstream.outputs.sha }}-${{ github.run_id }}
+          key: singbox-state-${{ steps.prep.outputs.ref }}-${{ steps.upstream.outputs.sha }}
           restore-keys: |
             singbox-state-${{ steps.prep.outputs.ref }}-
-      - name: Decide if build is needed
+
+      - name: Decide build or skip
         id: decide
-        shell: bash
         run: |
           if [ "$FORCE" = "true" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "Manual force build requested."
+            echo "changed=true" >> $GITHUB_OUTPUT
             exit 0
           fi
-          mkdir -p "upstream_state/${REF}"
+
+          mkdir -p upstream_state/${REF}
           PREV=""
-          [ -f "upstream_state/${REF}/sha.txt" ] && PREV=$(cat "upstream_state/${REF}/sha.txt")
-          if [ "$PREV" = "${UPSTREAM_SHA}" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No upstream changes. Skipping build."
+          [ -f upstream_state/${REF}/sha.txt ] && PREV=$(cat upstream_state/${REF}/sha.txt)
+
+          if [ "$PREV" = "$UPSTREAM_SHA" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes in upstream. Skip build."
           else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "Upstream changed from '$PREV' to '${UPSTREAM_SHA}'. Building..."
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Upstream changed → build triggered."
           fi
-      - name: Checkout official sing-box repository at resolved commit
+
+      - name: Checkout upstream
         if: steps.decide.outputs.changed == 'true'
         uses: actions/checkout@v4
         with:
@@ -99,113 +118,96 @@ jobs:
           ref: ${{ steps.upstream.outputs.sha }}
           fetch-depth: 1
 
-      - name: Set up Go
+      - name: Setup Go
         if: steps.decide.outputs.changed == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
 
-      - name: Fix version in source code
-        if: steps.decide.outputs.changed == 'true'
-        id: fix-version
-        shell: bash
-        run: |
-          VERSION="reF1nd"
-          echo "Fixed version: $VERSION"
-          
-          FILES=$(find . -name "*.go" -type f | xargs grep -l -E "(CoreVersion|Version).*=.*\"(unknown|dev|v[0-9])\"" || true)
-          if [ -n "$FILES" ]; then
-            echo "$FILES" | while read file; do
-              echo "Fixing version in: $file"
-              sed -i 's/\(CoreVersion\|Version\).*=.*\"\(unknown\|dev\|v[0-9][^"]*\)\"/\1 = "'"$VERSION"'"/g' "$file"
-            done
-          else
-            echo "Trying alternative pattern..."
-            FILES2=$(find . -name "*.go" -type f | xargs grep -l -E "(const|var).*(CoreVersion|Version)" || true)
-            if [ -n "$FILES2" ]; then
-              echo "$FILES2" | while read file; do
-                echo "Checking: $file"
-                sed -i 's/\(CoreVersion\|Version\).*=.*\"[^\"]*\"/\1 = "'"$VERSION"'"/g' "$file"
-              done
-            fi
-          fi
-          
-          echo "Version fix completed"
-
-      - name: Derive version and names
-        if: steps.decide.outputs.changed == 'true'
+      - name: Define build metadata
         id: meta
-        shell: bash
+        if: steps.decide.outputs.changed == 'true'
         run: |
           VERSION="reF1nd"
+          TAGS="with_quic with_utls with_clash_api"
+
           OUT="sing-box-linux-arm64-${VERSION}-${SHORT_SHA}"
           ZIP="${OUT}.zip"
           TAG="sing-box-${VERSION}-${SHORT_SHA}"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "OUT=$OUT" >> "$GITHUB_ENV"
-          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "out=$OUT" >> "$GITHUB_OUTPUT"
-          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-      - name: Build sing-box for arm64
+
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TAGS=$TAGS" >> $GITHUB_ENV
+          echo "OUT=$OUT" >> $GITHUB_ENV
+          echo "ZIP=$ZIP" >> $GITHUB_ENV
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "out=$OUT" >> $GITHUB_OUTPUT
+          echo "zip=$ZIP" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build sing-box (arm64 minimal)
         if: steps.decide.outputs.changed == 'true'
         env:
           CGO_ENABLED: 0
           GOOS: linux
           GOARCH: arm64
         run: |
-          go build -v -o "${OUT}" -trimpath -ldflags="-s -w" -tags="with_quic with_utls with_clash_api" ./cmd/sing-box
-      - name: Verify binary architecture
+          go build \
+            -trimpath \
+            -o "${OUT}" \
+            -ldflags="-s -w -X github.com/sagernet/sing-box/constant.Version=${VERSION}" \
+            -tags="${TAGS}" \
+            ./cmd/sing-box
+
+      - name: Verify arch
         if: steps.decide.outputs.changed == 'true'
-        shell: bash
-        run: |
-          file "${OUT}"
-          echo "Binary architecture verification completed"
+        run: file "${OUT}"
+
       - name: Package zip
         if: steps.decide.outputs.changed == 'true'
-        shell: bash
         run: |
           install -m 0755 "${OUT}" sing-box
           zip -9 -j "${ZIP}" sing-box
-          rm -f sing-box
-      - name: Generate checksums
+          rm sing-box
+
+      - name: SHA256
         if: steps.decide.outputs.changed == 'true'
-        run: |
-          sha256sum "${ZIP}" > "${ZIP}.sha256"
-      - name: Upload Artifact
+        run: sha256sum "${ZIP}" > "${ZIP}.sha256"
+
+      - name: Upload artifact
         if: steps.decide.outputs.changed == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: sing-box-minimal-reF1nd-arm64-${{ steps.upstream.outputs.short }}-zip
+          name: sing-box-minimal-arm64-${{ steps.upstream.outputs.short }}
           path: |
             ${{ steps.meta.outputs.zip }}
             ${{ steps.meta.outputs.zip }}.sha256
-      - name: Create GitHub Release and upload assets
+
+      - name: Release
         if: steps.decide.outputs.changed == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
-          name: sing-box minimal reF1nd (${{ steps.upstream.outputs.short }})
+          name: sing-box minimal (${{ steps.upstream.outputs.short }})
           body: |
             Source: reF1nd/sing-box @ ${{ steps.upstream.outputs.short }}
             GOOS/GOARCH: linux/arm64
-            Tags: with_quic with_clash_api
+            Tags: ${{ steps.meta.outputs.tags }}
           prerelease: true
           files: |
             ${{ steps.meta.outputs.zip }}
             ${{ steps.meta.outputs.zip }}.sha256
-      - name: Update state and save cache
+
+      - name: Save state
         if: steps.decide.outputs.changed == 'true'
-        shell: bash
         run: |
-          mkdir -p "upstream_state/${REF}"
-          echo "${UPSTREAM_SHA}" > "upstream_state/${REF}/sha.txt"
-      - name: Save cache
+          mkdir -p upstream_state/${REF}
+          echo "${UPSTREAM_SHA}" > upstream_state/${REF}/sha.txt
+
+      - name: Cache save
         if: steps.decide.outputs.changed == 'true'
         uses: actions/cache/save@v3
-        continue-on-error: true
         with:
           path: upstream_state/${{ steps.prep.outputs.ref }}
-          key: singbox-state-${{ steps.prep.outputs.ref }}-${{ steps.upstream.outputs.sha }}-${{ github.run_id }}
+          key: singbox-state-${{ steps.prep.outputs.ref }}-${{ steps.upstream.outputs.sha }}
