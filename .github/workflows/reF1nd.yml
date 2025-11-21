@@ -32,36 +32,34 @@ jobs:
             REF="reF1nd-main"
           fi
           echo "UPSTREAM_REPO=$UPSTREAM_REPO" >> "$GITHUB_ENV"
-          echo "REF=$REF" >> "$GITHUB_ENV"
-          echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "upstream_repo=$UPSTREAM_REPO" >> "$GITHUB_OUTPUT"
+          echo "REF=$REF"                     >> "$GITHUB_ENV"
 
       - name: Resolve upstream commit SHA
         id: upstream
         shell: bash
         run: |
           set -e
-          SHA=$(git ls-remote --exit-code --heads "${{ steps.prep.outputs.upstream_repo }}" "refs/heads/${REF}" | cut -f1) || true
+          SHA=$(git ls-remote --exit-code --heads "$UPSTREAM_REPO" "refs/heads/${REF}" | cut -f1) || true
           if [ -z "$SHA" ]; then
-            SHA=$(git ls-remote --exit-code --tags "${{ steps.prep.outputs.upstream_repo }}" "refs/tags/${REF}^{}" | cut -f1) || true
+            SHA=$(git ls-remote --exit-code --tags "$UPSTREAM_REPO" "refs/tags/${REF}^{}" | cut -f1) || true
           fi
           if [ -z "$SHA" ]; then
-            SHA=$(git ls-remote "${{ steps.prep.outputs.upstream_repo }}" HEAD | cut -f1)
+            SHA=$(git ls-remote "$UPSTREAM_REPO" HEAD | cut -f1)
           fi
           SHORT_SHA="${SHA:0:7}"
-          echo "UPSTREAM_SHA=$SHA" >> "$GITHUB_ENV"
+          echo "UPSTREAM_SHA=$SHA"    >> "$GITHUB_ENV"
           echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_ENV"
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "short=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA"             >> "$GITHUB_OUTPUT"
+          echo "short=$SHORT_SHA"     >> "$GITHUB_OUTPUT"
 
       - name: Restore last processed state
         id: cache-restore
         uses: actions/cache/restore@v3
         with:
-          path: upstream_state/${{ steps.prep.outputs.ref }}
-          key: singbox-state-${{ steps.prep.outputs.ref }}-${{ steps.upstream.outputs.sha }}
+          path: upstream_state/${{ env.REF }}
+          key: singbox-state-${{ env.REF }}-${{ env.UPSTREAM_SHA }}
           restore-keys: |
-            singbox-state-${{ steps.prep.outputs.ref }}-
+            singbox-state-${{ env.REF }}-
 
       - name: Decide if build is needed
         id: decide
@@ -83,7 +81,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: reF1nd/sing-box
-          ref: ${{ steps.upstream.outputs.sha }}
+          ref: ${{ env.UPSTREAM_SHA }}
           fetch-depth: 1
 
       - name: Set up Go
@@ -99,15 +97,11 @@ jobs:
         run: |
           VERSION="${REF}"
           OUT="sing-box-linux-arm64-${VERSION}-${SHORT_SHA}"
-          ZIP="${OUT}.zip"
           TAG="sing-box-${VERSION}-${SHORT_SHA}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "OUT=$OUT" >> "$GITHUB_ENV"
-          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "OUT=$OUT"         >> "$GITHUB_ENV"
+          echo "TAG=$TAG"         >> "$GITHUB_ENV"
           echo "out=$OUT" >> "$GITHUB_OUTPUT"
-          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Detect version vars and compose ldflags
@@ -116,7 +110,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          MODULE=$(go list -m)
+          MODULE=$(go list -m -f '{{.Path}}')
           PKG_BUILD="$MODULE/cmd/internal/build"
           PKG_CONST="$MODULE/constant"
           LDFLAGS_EXTRA=""
@@ -160,45 +154,40 @@ jobs:
           GOOS: linux
           GOARCH: arm64
         run: |
-          go build -v -o "${OUT}" -trimpath -ldflags="-s -w ${LDFLAGS_EXTRA}" -tags="with_quic with_clash_api" ./cmd/sing-box
-
-      - name: Package zip
-        if: steps.decide.outputs.changed == 'true'
-        shell: bash
-        run: |
-          install -m 0755 "${OUT}" sing-box
-          zip -9 -j "${ZIP}" sing-box
-          rm -f sing-box
+          go build -v -o "${OUT}" -trimpath \
+            -ldflags="-s -w ${LDFLAGS_EXTRA}" \
+            -tags="with_quic with_clash_api" \
+            ./cmd/sing-box
 
       - name: Generate checksums
         if: steps.decide.outputs.changed == 'true'
         run: |
-          sha256sum "${ZIP}" > "${ZIP}.sha256"
+          sha256sum "${OUT}" > "${OUT}.sha256"
 
-      - name: Upload Artifact
+      - name: Upload Artifact (optional)
         if: steps.decide.outputs.changed == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: sing-box-minimal-${{ steps.meta.outputs.version }}-arm64-${{ steps.upstream.outputs.short }}-zip
+          name: sing-box-minimal-${{ env.VERSION }}-arm64-${{ env.SHORT_SHA }}
           path: |
-            ${{ steps.meta.outputs.zip }}
-            ${{ steps.meta.outputs.zip }}.sha256
+            ${{ env.OUT }}
+            ${{ env.OUT }}.sha256
 
       - name: Create GitHub Release and upload assets
         if: steps.decide.outputs.changed == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: sing-box minimal ${{ steps.meta.outputs.version }} (${{ steps.upstream.outputs.short }})
+          tag_name: ${{ env.TAG }}
+          name: sing-box minimal ${{ env.VERSION }} (${{ env.SHORT_SHA }})
           body: |
-            - Source: reF1nd/sing-box @ ${{ steps.meta.outputs.version }} (${{ steps.upstream.outputs.short }})
+            - Source: reF1nd/sing-box @ ${{ env.VERSION }} (${{ env.SHORT_SHA }})
             - GOOS/GOARCH: linux/arm64
             - Tags: with_quic with_clash_api
             - ldflags: ${{ steps.ldflags.outputs.ldflags }}
           prerelease: true
           files: |
-            ${{ steps.meta.outputs.zip }}
-            ${{ steps.meta.outputs.zip }}.sha256
+            ${{ env.OUT }}
+            ${{ env.OUT }}.sha256
 
       - name: Update state and save cache
         if: steps.decide.outputs.changed == 'true'
@@ -211,5 +200,5 @@ jobs:
         if: steps.decide.outputs.changed == 'true'
         uses: actions/cache/save@v3
         with:
-          path: upstream_state/${{ steps.prep.outputs.ref }}
-          key: singbox-state-${{ steps.prep.outputs.ref }}-${{ steps.upstream.outputs.sha }}
+          path: upstream_state/${{ env.REF }}
+          key: singbox-state-${{ env.REF }}-${{ env.UPSTREAM_SHA }}
