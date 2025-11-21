@@ -110,7 +110,6 @@ jobs:
         id: meta
         shell: bash
         run: |
-          # 固定版本号为 reF1nd
           VERSION="reF1nd"
           OUT="sing-box-linux-arm64-${VERSION}-${SHORT_SHA}"
           ZIP="${OUT}.zip"
@@ -130,7 +129,6 @@ jobs:
           GOOS: linux
           GOARCH: arm64
         run: |
-          # 移除所有 ldflags 版本注入，仅保留基础优化
           go build -v -o "${OUT}" -trimpath -ldflags="-s -w" -tags="with_quic with_clash_api" ./cmd/sing-box
       - name: Package zip
         if: steps.decide.outputs.changed == 'true'
@@ -158,11 +156,10 @@ jobs:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: sing-box minimal reF1nd (${{ steps.upstream.outputs.short }})
           body: |
-            - Source: reF1nd/sing-box @ ${{ steps.upstream.outputs.short }}
-            - Version: reF1nd (fixed)
-            - GOOS/GOARCH: linux/arm64
-            - Tags: with_quic with_clash_api
-            - Build: Minimal static binary
+            Source: reF1nd/sing-box @ ${{ steps.upstream.outputs.short }}
+            Version: reF1nd
+            GOOS/GOARCH: linux/arm64
+            Tags: with_quic with_clash_api
           prerelease: true
           files: |
             ${{ steps.meta.outputs.zip }}
