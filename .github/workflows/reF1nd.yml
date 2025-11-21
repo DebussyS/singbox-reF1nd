@@ -112,17 +112,24 @@ jobs:
         run: |
           VERSION="reF1nd"
           echo "Fixed version: $VERSION"
-          find . -name "*.go" -type f | xargs grep -l -E "(CoreVersion|Version).*=.*\"(unknown|dev|v[0-9])\"" | while read file; do
-            echo "Fixing version in: $file"
-            sed -i 's/\(CoreVersion\|Version\).*=.*\"\(unknown\|dev\|v[0-9][^"]*\)\"/\1 = "'"$VERSION"'"/g' "$file"
-          done
-          if [ -z "$(find . -name "*.go" -type f | xargs grep -l -E "(CoreVersion|Version).*=.*\"(unknown|dev|v[0-9])\")" ]; then
-            echo "Trying alternative pattern..."
-            find . -name "*.go" -type f | xargs grep -l -E "(const|var).*(CoreVersion|Version)" | while read file; do
-              echo "Checking: $file"
-              sed -i 's/\(CoreVersion\|Version\).*=.*\"[^\"]*\"/\1 = "'"$VERSION"'"/g' "$file"
+          
+          FILES=$(find . -name "*.go" -type f | xargs grep -l -E "(CoreVersion|Version).*=.*\"(unknown|dev|v[0-9])\"" || true)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | while read file; do
+              echo "Fixing version in: $file"
+              sed -i 's/\(CoreVersion\|Version\).*=.*\"\(unknown\|dev\|v[0-9][^"]*\)\"/\1 = "'"$VERSION"'"/g' "$file"
             done
+          else
+            echo "Trying alternative pattern..."
+            FILES2=$(find . -name "*.go" -type f | xargs grep -l -E "(const|var).*(CoreVersion|Version)" || true)
+            if [ -n "$FILES2" ]; then
+              echo "$FILES2" | while read file; do
+                echo "Checking: $file"
+                sed -i 's/\(CoreVersion\|Version\).*=.*\"[^\"]*\"/\1 = "'"$VERSION"'"/g' "$file"
+              done
+            fi
           fi
+          
           echo "Version fix completed"
 
       - name: Derive version and names
@@ -182,7 +189,6 @@ jobs:
           name: sing-box minimal reF1nd (${{ steps.upstream.outputs.short }})
           body: |
             Source: reF1nd/sing-box @ ${{ steps.upstream.outputs.short }}
-            Version: reF1nd
             GOOS/GOARCH: linux/arm64
             Tags: with_quic with_clash_api
           prerelease: true
