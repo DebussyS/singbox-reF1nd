@@ -1,58 +1,41 @@
 name: Build Minimal sing-box Core
 
-# 触发条件
 on:
 workflow_dispatch:
 inputs:
 version:
 description: 'sing-box version (tag/branch) to build'
 required: true
-# 默认编译 reF1nd/sing-box 的 main 分支
 default: 'reF1nd-main'
 
 jobs:
 build:
-# 指定运行环境为最新的 ubuntu 系统
 runs-on: ubuntu-latest
-
-# 定义工作步骤
 steps:
-# 第一步：拉取官方 sing-box 仓库的代码
 - name: Checkout official sing-box repository
-# 使用官方的 checkout action
 uses: actions/checkout@v4
 with:
-# 指定要拉取的仓库地址
 repository: 'reF1nd/sing-box'
-# 使用你在运行时输入的版本号
 ref: ${{ github.event.inputs.version }}
 
-# 第二步：设置 Go 语言环境
 - name: Set up Go
-# 使用官方的 setup-go action
 uses: actions/setup-go@v5
 with:
 go-version: '1.22'
 
-# 第三步：编译 arm64 核心
 - name: Build sing-box for arm64
 env:
 CGO_ENABLED: 0
 GOOS: linux
 GOARCH: arm64
 run: |
-# 编译命令，tags 中只保留了 with_quic 和 with_clash_api
 go build -v -o sing-box-linux-arm64 -trimpath \
 -ldflags="-s -w" \
 -tags="with_quic with_clash_api" \
 ./cmd/sing-box
 
-# 第四步：上传编译产物
 - name: Upload Artifact
-# 使用官方的 upload-artifact action
 uses: actions/upload-artifact@v4
 with:
-# 定义上传文件的名称
 name: sing-box-minimal-${{ github.event.inputs.version }}-arm64
-# 定义要上传的文件路径
 path: sing-box-linux-arm64
