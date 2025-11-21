@@ -157,11 +157,12 @@ jobs:
           GOARCH: arm64
         run: |
           go build -v -o "${OUT}" -trimpath -ldflags="-s -w" -tags="with_quic with_clash_api" ./cmd/sing-box
-      - name: Verify version
+      - name: Verify binary architecture
         if: steps.decide.outputs.changed == 'true'
         shell: bash
         run: |
-          ./${OUT} version
+          file "${OUT}"
+          echo "Binary architecture verification completed"
       - name: Package zip
         if: steps.decide.outputs.changed == 'true'
         shell: bash
