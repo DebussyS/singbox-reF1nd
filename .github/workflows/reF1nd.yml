@@ -144,40 +144,39 @@ jobs:
           PKG_BUILD="$MODULE/cmd/internal/build"
           PKG_CONST="$MODULE/constant"
           LDFLAGS_EXTRA=""
-          add_flag() { LDFLAGS_EXTRA="$LDFLAGS_EXTRA -X \$1=\$2"; }
 
           if [ -d constant ]; then
             if grep -R -q -E 'var[[:space:]]+CoreVersion\b' constant; then
-              add_flag "${PKG_CONST}.CoreVersion" "${VERSION}"
+              LDFLAGS_EXTRA="$LDFLAGS_EXTRA -X ${PKG_CONST}.CoreVersion=${VERSION}"
             fi
             if grep -R -q -E 'var[[:space:]]+Version\b' constant; then
-              add_flag "${PKG_CONST}.Version" "${VERSION}"
+              LDFLAGS_EXTRA="$LDFLAGS_EXTRA -X ${PKG_CONST}.Version=${VERSION}"
             fi
           fi
 
           if [ -d cmd/internal/build ]; then
             if grep -R -q -E 'var[[:space:]]+Version\b' cmd/internal/build; then
-              add_flag "${PKG_BUILD}.Version" "${VERSION}"
+              LDFLAGS_EXTRA="$LDFLAGS_EXTRA -X ${PKG_BUILD}.Version=${VERSION}"
             fi
             if grep -R -q -E 'var[[:space:]]+(GitCommit|Commit)\b' cmd/internal/build; then
               if grep -R -q -E 'var[[:space:]]+GitCommit\b' cmd/internal/build; then
-                add_flag "${PKG_BUILD}.GitCommit" "${SHORT_SHA}"
+                LDFLAGS_EXTRA="$LDFLAGS_EXTRA -X ${PKG_BUILD}.GitCommit=${SHORT_SHA}"
               else
-                add_flag "${PKG_BUILD}.Commit" "${SHORT_SHA}"
+                LDFLAGS_EXTRA="$LDFLAGS_EXTRA -X ${PKG_BUILD}.Commit=${SHORT_SHA}"
               fi
             fi
             if grep -R -q -E 'var[[:space:]]+(BuildTime|BuildDate)\b' cmd/internal/build; then
               BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
               if grep -R -q -E 'var[[:space:]]+BuildTime\b' cmd/internal/build; then
-                add_flag "${PKG_BUILD}.BuildTime" "${BUILD_TS}"
+                LDFLAGS_EXTRA="$LDFLAGS_EXTRA -X ${PKG_BUILD}.BuildTime=${BUILD_TS}"
               else
-                add_flag "${PKG_BUILD}.BuildDate" "${BUILD_TS}"
+                LDFLAGS_EXTRA="$LDFLAGS_EXTRA -X ${PKG_BUILD}.BuildDate=${BUILD_TS}"
               fi
             fi
           fi
 
-          echo "LDFLAGS_EXTRA=$LDFLAGS_EXTRA" >> "$GITHUB_ENV"
-          echo "ldflags=$LDFLAGS_EXTRA" >> "$GITHUB_OUTPUT"
+          echo "LDFLAGS_EXTRA=${LDFLAGS_EXTRA}" >> "$GITHUB_ENV"
+          echo "ldflags=${LDFLAGS_EXTRA}" >> "$GITHUB_OUTPUT"
 
       - name: Build sing-box for arm64
         if: steps.decide.outputs.changed == 'true'
