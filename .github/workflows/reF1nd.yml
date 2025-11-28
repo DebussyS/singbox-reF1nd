@@ -7,7 +7,7 @@ on:
         description: 'sing-box source (tag/branch/commit)'
         type: string
         required: false
-        default: 'reF1nd-main'
+        default: 'reF1nd-dev'
       build_version:
         description: 'Version string to embed (constant.Version) [required]'
         type: string
@@ -56,21 +56,21 @@ jobs:
           echo "short=$SHORT" >> $GITHUB_OUTPUT
 
       - name: Checkout upstream
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: reF1nd/sing-box
           ref: ${{ steps.upstream.outputs.sha }}
           fetch-depth: 1
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.22'
+          go-version: '^1.25.4'
 
       - name: Define build metadata
         id: meta
         run: |
-          TAGS="with_quic with_utls with_clash_api"
+          TAGS="with_clash_api"
           OUT="sing-box-linux-arm64-${VERSION}-${SHORT_SHA}"
           ZIP="${OUT}.zip"
           TAG="sing-box-${VERSION}-${SHORT_SHA}"
