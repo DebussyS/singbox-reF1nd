@@ -15,8 +15,8 @@ on:
       build_tags:
         description: 'Tags string to embed (constant.Tags) [required]'
         type: string
-        required: true
-        default: 'with_clash_api'
+        required: false
+        default: with_clash_api
 
 jobs:
   build:
