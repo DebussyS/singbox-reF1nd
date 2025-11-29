@@ -26,7 +26,6 @@ jobs:
           UPSTREAM_REPO="https://github.com/reF1nd/sing-box.git"
           REF="${{ github.event.inputs.version }}"
           VERSION="${{ github.event.inputs.build_version }}"
-          
 
           echo "REF=$REF" >> $GITHUB_ENV
           echo "UPSTREAM_REPO=$UPSTREAM_REPO" >> $GITHUB_ENV
@@ -70,7 +69,7 @@ jobs:
 
       - name: Define build metadata
         id: meta
-        run:
+        run: |
           TAGS="with_clash_api"
           OUT="sing-box-linux-arm64-${VERSION}-${SHORT_SHA}"
           ZIP="${OUT}.zip"
