@@ -12,11 +12,6 @@ on:
         description: 'Version string to embed (constant.Version) [required]'
         type: string
         required: true
-      build_tags:
-        description: 'Tags string to embed (constant.Tags) [required]'
-        type: string
-        required: false
-        default: with_clash_api
 
 jobs:
   build:
@@ -31,7 +26,7 @@ jobs:
           UPSTREAM_REPO="https://github.com/reF1nd/sing-box.git"
           REF="${{ github.event.inputs.version }}"
           VERSION="${{ github.event.inputs.build_version }}"
-          TAGS="${{ github.event.inputs.build_tags }}"
+          
 
           echo "REF=$REF" >> $GITHUB_ENV
           echo "UPSTREAM_REPO=$UPSTREAM_REPO" >> $GITHUB_ENV
@@ -76,7 +71,7 @@ jobs:
       - name: Define build metadata
         id: meta
         run:
-        
+          TAGS="with_clash_api"
           OUT="sing-box-linux-arm64-${VERSION}-${SHORT_SHA}"
           ZIP="${OUT}.zip"
           TAG="sing-box-${VERSION}-${SHORT_SHA}"
