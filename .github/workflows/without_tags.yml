@@ -12,7 +12,6 @@ on:
         description: 'Version string to embed (constant.Version) [required]'
         type: string
         required: true
-      
 
 jobs:
   build:
@@ -27,7 +26,6 @@ jobs:
           UPSTREAM_REPO="https://github.com/reF1nd/sing-box.git"
           REF="${{ github.event.inputs.version }}"
           VERSION="${{ github.event.inputs.build_version }}"
-          
 
           echo "REF=$REF" >> $GITHUB_ENV
           echo "UPSTREAM_REPO=$UPSTREAM_REPO" >> $GITHUB_ENV
@@ -71,18 +69,18 @@ jobs:
 
       - name: Define build metadata
         id: meta
-        run:
-        
+        run: |
+
           OUT="sing-box-linux-arm64-${VERSION}-${SHORT_SHA}"
           ZIP="${OUT}.zip"
           TAG="sing-box-${VERSION}-${SHORT_SHA}"
 
-        
+  
           echo "OUT=$OUT" >> $GITHUB_ENV
           echo "ZIP=$ZIP" >> $GITHUB_ENV
           echo "TAG=$TAG" >> $GITHUB_ENV
 
-        
+  
           echo "out=$OUT" >> $GITHUB_OUTPUT
           echo "zip=$ZIP" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
