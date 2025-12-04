@@ -22,7 +22,7 @@ jobs:
         run: |
           UPSTREAM_REPO="https://github.com/reF1nd/sing-box.git"
           REF="${{ github.event.inputs.version }}"
-          FORMATTED_TIME=$(date -u +"%Y%m%d%H%M")
+          FORMATTED_TIME=$(TZ=Asia/Shanghai date +"%Y%m%d%H%M")
           
 
           echo "REF=$REF" >> $GITHUB_ENV
