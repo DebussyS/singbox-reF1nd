@@ -8,10 +8,7 @@ on:
         type: string
         required: false
         default: 'reF1nd-dev'
-      build_version:
-        description: 'Version string to embed (constant.Version) [required]'
-        type: string
-        required: true
+      
 
 jobs:
   build:
@@ -25,11 +22,12 @@ jobs:
         run: |
           UPSTREAM_REPO="https://github.com/reF1nd/sing-box.git"
           REF="${{ github.event.inputs.version }}"
-          VERSION="${{ github.event.inputs.build_version }}"
+          FORMATTED_TIME=$(date -u +"%Y%m%d%H%M")
+          
 
           echo "REF=$REF" >> $GITHUB_ENV
           echo "UPSTREAM_REPO=$UPSTREAM_REPO" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$FORMATTED_TIME" >> $GITHUB_ENV
           echo "ref=$REF" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "upstream=$UPSTREAM_REPO" >> $GITHUB_OUTPUT
