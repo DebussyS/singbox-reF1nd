@@ -115,15 +115,3 @@ jobs:
             ${{ steps.meta.outputs.zip }}
             ${{ steps.meta.outputs.zip }}.sha256
 
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: sing-box minimal (${{ steps.upstream.outputs.short }})
-          body: |
-            Source: reF1nd/sing-box @ ${{ env.VERSION }}
-            GOOS/GOARCH: linux/arm64
-          prerelease: true
-          files: |
-            ${{ steps.meta.outputs.zip }}
-            ${{ steps.meta.outputs.zip }}.sha256
