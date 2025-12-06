@@ -1,4 +1,4 @@
-name: Build Mini sing-box Core without tags
+name: Build original sing-box Core without tags
 
 on:
   workflow_dispatch:
