@@ -1,0 +1,127 @@
+name: Build sing-box (custom Go tags)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'sing-box source (tag/branch/commit)'
+        type: string
+        required: false
+        default: 'stable'
+      build_tags:
+        description: 'Go build tags, comma-separated (see sing-box release/DEFAULT_BUILD_TAGS_OTHERS). Empty = use default below.'
+        type: string
+        required: false
+        default: 'with_quic'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Prepare context
+        id: prep
+        run: |
+          UPSTREAM_REPO="https://github.com/SagerNet/sing-box.git"
+          REF="${{ github.event.inputs.version }}"
+          FORMATTED_TIME=$(TZ=Asia/Shanghai date +"%Y%m%d%H%M")
+          # 默认启用 QUIC；手动留空时仍回退为 with_quic
+          RAW_TAGS="${{ github.event.inputs.build_tags }}"
+          if [ -z "$RAW_TAGS" ]; then
+            RAW_TAGS="with_quic"
+          fi
+          # 去掉多余空格，便于 go build -tags
+          BUILD_TAGS=$(echo "$RAW_TAGS" | tr -s ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+          echo "REF=$REF" >> $GITHUB_ENV
+          echo "UPSTREAM_REPO=$UPSTREAM_REPO" >> $GITHUB_ENV
+          echo "VERSION=$FORMATTED_TIME" >> $GITHUB_ENV
+          echo "BUILD_TAGS=$BUILD_TAGS" >> $GITHUB_ENV
+          echo "ref=$REF" >> $GITHUB_OUTPUT
+          echo "version=$FORMATTED_TIME" >> $GITHUB_OUTPUT
+          echo "upstream=$UPSTREAM_REPO" >> $GITHUB_OUTPUT
+          echo "build_tags=$BUILD_TAGS" >> $GITHUB_OUTPUT
+
+      - name: Resolve SHA (tag/branch/commit)
+        id: upstream
+        run: |
+          set -e
+          SHA=$(git ls-remote --heads "${UPSTREAM_REPO}" "refs/heads/${REF}" | cut -f1)
+          if [ -z "$SHA" ]; then
+            SHA=$(git ls-remote --tags "${UPSTREAM_REPO}" "${REF}^{}" | cut -f1)
+          fi
+          if [ -z "$SHA" ]; then
+            SHA=$(git ls-remote "${UPSTREAM_REPO}" "${REF}" | cut -f1)
+          fi
+          if [ -z "$SHA" ]; then
+            echo "ERROR: REF '${REF}' not found (branch/tag/commit)."
+            exit 1
+          fi
+          SHORT="${SHA:0:7}"
+          echo "UPSTREAM_SHA=$SHA" >> $GITHUB_ENV
+          echo "SHORT_SHA=$SHORT" >> $GITHUB_ENV
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "short=$SHORT" >> $GITHUB_OUTPUT
+
+      - name: Checkout upstream
+        uses: actions/checkout@v5
+        with:
+          repository: reF1nd/sing-box
+          ref: ${{ steps.upstream.outputs.sha }}
+          fetch-depth: 1
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '^1.25.8'
+
+      - name: Define build metadata
+        id: meta
+        run: |
+          OUT="sing-box-linux-arm64-${VERSION}-${SHORT_SHA}"
+          ZIP="${OUT}.zip"
+          TAG="sing-box-${VERSION}-${SHORT_SHA}"
+
+          echo "OUT=$OUT" >> $GITHUB_ENV
+          echo "ZIP=$ZIP" >> $GITHUB_ENV
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+          echo "out=$OUT" >> $GITHUB_OUTPUT
+          echo "zip=$ZIP" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build sing-box (arm64)
+        env:
+          CGO_ENABLED: 0
+          GOOS: linux
+          GOARCH: arm64
+        run: |
+          echo "Building with -tags: ${BUILD_TAGS}"
+          go build \
+            -tags "${BUILD_TAGS}" \
+            -trimpath \
+            -o "${OUT}" \
+            -ldflags="-s -w -X github.com/sagernet/sing-box/constant.Version=${VERSION}" \
+            ./cmd/sing-box
+
+      - name: Verify arch
+        run: file "${OUT}"
+
+      - name: Package zip
+        run: |
+          install -m 0755 "${OUT}" sing-box
+          zip -9 -j "${ZIP}" sing-box
+          rm sing-box
+
+      - name: SHA256
+        run: sha256sum "${ZIP}" > "${ZIP}.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sing-box-linux-arm64-${{ steps.upstream.outputs.short }}-tags
+          path: |
+            ${{ steps.meta.outputs.zip }}
+            ${{ steps.meta.outputs.zip }}.sha256
