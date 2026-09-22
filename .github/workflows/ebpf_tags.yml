@@ -12,7 +12,7 @@ on:
         description: 'Go build tags, comma-separated (see sing-box release/DEFAULT_BUILD_TAGS_OTHERS). Empty = use default below.'
         type: string
         required: false
-        default: 'with_quic'
+        default: 'with_quic with_ebpf with_tailscale with_tailscale'
 
 jobs:
   build:
@@ -75,7 +75,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: '^1.25.8'
+          go-version: '1.26'
 
       - name: Define build metadata
         id: meta
